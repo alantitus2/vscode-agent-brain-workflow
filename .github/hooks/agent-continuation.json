@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node scripts/agent-stop-guard.mjs",
+        "cwd": ".",
+        "timeout": 10
+      }
+    ]
+  }
+}
