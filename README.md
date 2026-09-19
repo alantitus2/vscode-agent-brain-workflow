@@ -1,7 +1,6 @@
 # Luna Worker + Sol Brain for VS Code Agents
 
-Portable, user-level VS Code Agent Host customizations for a two-session
-workflow:
+Workspace-native VS Code Agent Host workflow for a two-session architecture:
 
 ```text
 normal default agent (Luna Worker / GPT-5.6-Luna)
@@ -14,15 +13,14 @@ Luna performs the file work, commands, builds, tests, and validation
 ```
 
 The normal default agent remains the executor. You do not need to select the
-Luna Worker profile for ordinary work. The always-on instruction file makes
-the default agent behave as Luna and consult the persistent Sol Brain when a
-task is architectural, ambiguous, difficult to diagnose, risky, or needs a
-material review.
+Luna Worker profile for ordinary work. `AGENTS.md` and the checked-in
+`.github/instructions/` file make the workspace default consult the persistent
+Sol Brain when a task is architectural, ambiguous, difficult to diagnose,
+risky, or needs a material review.
 
-This package is deliberately separate from any application repository. It
-contains prompts, user-level agent definitions, installers, and this guide—no
-project-specific coding rules, source code, account state, credentials, or
-session databases.
+This repository contains the workspace instructions, optional named profiles,
+guard scripts, tests, hook configuration, and this guide—no application source,
+account state, credentials, or session databases.
 
 ## Requirements
 
@@ -31,8 +29,8 @@ session databases.
 - The same VS Code/Agent Host environment in which you want the customizations
   installed.
 
-VS Code's current user-level Agent Host custom-agent location is
-`~/.copilot/agents`. See the [VS Code custom agents documentation](https://code.visualstudio.com/docs/agent-customization/custom-agents).
+The workspace-scoped Agent Host files live under `.github/agents/` and
+`.github/instructions/`. See the [VS Code custom agents documentation](https://code.visualstudio.com/docs/agent-customization/custom-agents).
 
 The included frontmatter uses the provider IDs that worked in the reference
 setup:
@@ -46,46 +44,28 @@ If a different installation exposes different model IDs, update the `model:`
 frontmatter and the matching model ID in the bootstrap instructions before
 installing.
 
-## Install
+## Workspace activation
 
-Clone or download this repository, then run the installer from its root.
+Clone or open this repository as the workspace. No `~/.copilot` copy, user-level
+installer, or named-agent selection is required.
 
-### WSL, Linux, or macOS Agent Host
+Validate the checked-in workflow from its root:
 
 ```bash
-./scripts/install-agent-customizations.sh
+node --test scripts/agent-handoff-guard.test.mjs scripts/agent-stop-guard.test.mjs scripts/workspace-agent-workflow.test.mjs
 ```
 
-### Windows PowerShell Agent Host
-
-```powershell
-.\scripts\install-agent-customizations.ps1
-```
-
-Both installers preserve an existing user-level file by default. To
-intentionally replace an existing copy with the repository version, add
-`--force` to the shell command or `-Force` to the PowerShell command.
-
-Set `COPILOT_HOME` when the Agent Host uses a non-default user directory. The
-installer writes only these three files:
-
-```text
-<COPILOT_HOME>/agents/luna-worker.agent.md
-<COPILOT_HOME>/agents/sol-brain.agent.md
-<COPILOT_HOME>/instructions/default-executor-sol-collaboration.instructions.md
-```
-
-Restart or reload the VS Code Agent Host after installation if the files do
-not appear immediately.
+The legacy installer scripts only validate this workspace layout and never
+write user-level files.
 
 ## Use the workflow
 
-1. Open a normal Agent session. Keep the model on GPT-5.6-Luna and set the
+1. Open a normal Agent session in this workspace. Keep the model on GPT-5.6-Luna and set the
    thinking effort to **Max**. Do not select the Luna Worker profile unless you
    want to inspect or explicitly invoke it; the default instruction is already
    active.
 2. The default agent looks for one active session titled
-   `Sol Brain — Persistent`. If it is missing, it creates exactly one using
+   `Sol Brain — Persistent`. If it is missing, the default workflow creates exactly one using
    `@provider=openai:gpt-5.6-sol`, initializes it for **Max** effort, and reuses
    it thereafter.
 3. When the task warrants deeper reasoning, Luna sends Sol a compact request
@@ -104,6 +84,35 @@ not appear immediately.
 4. Luna uses Sol's decision, then performs the implementation and validation
    itself. Sol is intentionally reasoning-only and has no routine file,
    command, or web tools.
+
+## Reliable handoff contract
+
+The Agent Host session API is not a durable request/reply queue. `Message sent`
+proves only enqueue acceptance. The default workflow records a local handoff,
+captures the highest completed Sol turn before dispatch, sends exactly once, and
+polls the same canonical session.
+
+Receipt is valid only when the transcript shows a newer complete assistant turn
+containing the exact `REQUEST_ID`. Idle status, partial `inProgress` text,
+prior answers, and queued-message acknowledgements are not completion evidence.
+The local guard records that evidence explicitly:
+
+```bash
+./bin/agent-handoff begin --id "$REQUEST_ID" \
+  --objective "short objective" --scope "exact files" --solver advisory
+./bin/agent-handoff solver-sent --id "$REQUEST_ID" --baseline-turn "$BASELINE_TURN"
+# Send once, poll the same session, then record either success:
+./bin/agent-handoff solver-received --id "$REQUEST_ID" \
+  --response-id "$REQUEST_ID" --response-turn "$RESPONSE_TURN" \
+  --response-role assistant --response-state complete --summary "decision"
+# Or timeout and explicit advisory fallback:
+# ./bin/agent-handoff solver-timeout --id "$REQUEST_ID" --reason "no response"
+# ./bin/agent-handoff solver-fallback --id "$REQUEST_ID" --summary "local decision and uncertainty"
+```
+
+Required work stays blocked until a valid late response arrives. Advisory work
+may start only after its fallback is recorded, and a late response cannot be
+claimed as influencing work that already started.
 
 Cross-session messages can require an approval prompt from VS Code. Approve
 that prompt when the request is expected; this package does not attempt to
@@ -141,15 +150,15 @@ cost/quality target. Always verify the picker when starting a fresh session.
 
 ## Files
 
-- `agents/luna-worker.agent.md` — explicit executor/orchestrator profile and
-  automatic-consultation policy.
-- `agents/sol-brain.agent.md` — persistent reasoning, architecture, diagnosis,
-  decision, and review profile with no routine tools.
-- `instructions/default-executor-sol-collaboration.instructions.md` —
+- `AGENTS.md` — workspace instructions for ordinary sessions.
+- `.github/instructions/default-executor-sol-collaboration.instructions.md` —
   always-on default behavior; this is what makes ordinary sessions act as
   Luna without selecting a custom agent.
-- `scripts/install-agent-customizations.sh` — WSL/Linux/macOS installer.
-- `scripts/install-agent-customizations.ps1` — Windows installer.
+- `.github/agents/` — optional workspace-scoped named profiles.
+- `.github/hooks/agent-continuation.json` — workspace Stop hook.
+- `bin/agent-handoff` and `scripts/agent-handoff-guard.mjs` — local handoff
+  ledger and receipt invariants.
+- `agents/` and `instructions/` — legacy portable reference copies only.
 
 ## Troubleshooting
 
@@ -157,8 +166,9 @@ cost/quality target. Always verify the picker when starting a fresh session.
 
 Confirm that the normal default agent is active, the session-management tools
 are available, and the session title is exactly `Sol Brain — Persistent`.
-Reload the Agent Host after installation. If VS Code presents a cross-session
-approval prompt, approve it before expecting a response.
+Reload the Agent Host after opening or updating the workspace if the files do
+not appear immediately. If VS Code presents a cross-session approval prompt,
+approve it before expecting a response.
 
 ### Sol cannot be created
 
@@ -166,11 +176,6 @@ The model picker/provider must expose the exact provider ID used by the prompt.
 If it does not, use the available Sol model ID consistently in both agent
 frontmatter and the bootstrap instruction, then set its thinking effort to
 Max manually.
-
-### Existing customizations were not replaced
-
-That is the default safety behavior. Re-run the installer with `--force` or
-`-Force` only after reviewing the repository copies.
 
 ### What is not backed up here
 
