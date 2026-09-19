@@ -1,37 +1,23 @@
 [CmdletBinding()]
-param(
-    [switch]$Force
-)
+param()
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$targetRoot = if ($env:COPILOT_HOME) {
-    $env:COPILOT_HOME
-} else {
-    Join-Path $env:USERPROFILE '.copilot'
-}
-
-$items = @(
-    'agents\luna-worker.agent.md',
-    'agents\sol-brain.agent.md',
-    'instructions\default-executor-sol-collaboration.instructions.md'
+$requiredPaths = @(
+    'AGENTS.md',
+    '.github\instructions\default-executor-sol-collaboration.instructions.md',
+    '.github\agents\sol-brain.agent.md',
+    '.github\hooks\agent-continuation.json',
+    'bin\agent-handoff',
+    'scripts\agent-handoff-guard.mjs',
+    'scripts\agent-stop-guard.mjs'
 )
 
-foreach ($relativePath in $items) {
-    $sourcePath = Join-Path $repoRoot $relativePath
-    $targetPath = Join-Path $targetRoot $relativePath
-    $targetDirectory = Split-Path -Parent $targetPath
-
-    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-        throw "Missing customization file: $sourcePath"
-    }
-
-    New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
-    if ($Force -or -not (Test-Path -LiteralPath $targetPath -PathType Leaf)) {
-        Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force
-        Write-Output "Installed: $targetPath"
-    } else {
-        Write-Output "Preserved existing file: $targetPath"
+foreach ($relativePath in $requiredPaths) {
+    $path = Join-Path $repoRoot $relativePath
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Missing workspace workflow file: $path"
     }
 }
 
-Write-Output "Installed VS Code Agent Host customizations from $repoRoot"
+Write-Output "Workspace-native Agent workflow is present in $repoRoot"
+Write-Output 'No user-level ~/.copilot files were installed.'
